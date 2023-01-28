@@ -1,0 +1,15 @@
+[[package]]
+name = "pyinotify"
+version = "0.9.6"
+description = "Linux filesystem events monitoring"
+category = "main"
+optional = false
+python-versions = "*"
+
+[metadata]
+lock-version = "1.1"
+python-versions = "^3.10"
+content-hash = "b4c9bb3dea24e241cb55d569eda724843ce79fcd095e44f65185953dfb2de242"
+
+[metadata.files]
+pyinotify = []
