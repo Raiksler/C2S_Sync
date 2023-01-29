@@ -15,16 +15,16 @@ class EventHandler(pyinotify.ProcessEvent):
         print("Detected file saving, checking...".format(path=event.path))
         if validate_changes() == True:                                            #Проводим валидацию изменений на клиенте.
             backup_hash = get_backup_hash()                                       #Получаем хэш бэкап файла, будем сравнивать его с хэшэм файла на сервере.
-            print("Local version hash is:",backup_hash)
             print("Comparing local file with server...")
             same_cash = compare_hash(backup_hash)
             if same_cash == True:
                 print("Local and server files are same. Proceed to send update to server...")
-                new_data = get_difference()                                           #Получаем новые данные.
-                if new_data != None:
-                    new_data["base_hash"] = backup_hash
-                    print(new_data)
-                    requests.post("http://127.0.0.1:5000/send_changes", json = new_data)
+                new_data = get_difference()                                       #Получаем новые данные.
+                if new_data != None:                                              #Если в локальном файле есть изменения - отправляем их на сервер.
+                    new_data["base_hash"] = backup_hash                           #!!! Добавляем к отправляемым данным хэш сумму файла, на которой базируются изменения. Это понадобится для работы системы контроля верссий на сервере.
+                    update_on_server = requests.post("http://127.0.0.1:5000/send_changes", json = new_data)
+                    if update_on_server.status_code == 200:                       #Данные улетели. Если все ок, обновляем бэкап файл до текущих изменений.
+                        update_backup()
             else:
                 print("Local and server files are different. Proceed to updating local file...")
         modify_mode = False                                                       #Снова запускаем мониторинг событий.
@@ -54,7 +54,7 @@ def get_difference():
             print("Changes not detected")
             return None
         else:
-            difference = list(difflib.unified_diff(backup_lines, data_lines, "data_backup.txt", "data.txt"))[4:]
+            difference = list(difflib.unified_diff(backup_lines, data_lines, "data_backup.txt", "data.txt", n=0))[3:]
             print(difference)
             changes = {"changes" : "", "new_line" : True}
             i = 0
@@ -62,9 +62,6 @@ def get_difference():
                 if i == 0 and difference[i][0] == "-":
                     changes["new_line"] = False
                     i += 1
-                elif i == 0:
-                    i += 1
-                    continue
                 else:
                     changes["changes"] = "".join([changes["changes"], difference[i][1:]])
                     i += 1
@@ -129,12 +126,24 @@ def return_to_backup():
         print("data.txt returned to backup")
 
 
+def update_backup():
+    with open("data.txt", 'r') as data, open ("data_backup.txt", "w") as backup:
+        data_lines = data.readlines()
+        backup.write("".join(data_lines))
+        print("Backup updated!")
+
 def stop_monitoring_to_modify(notifier):                                    #Колбек цикла мониторинга изменений файла. Отключает мониторинг на время изменения файлов.
     global modify_mode
     return modify_mode           
 
 
 if __name__ == "__main__":
+
+    if requests.get('http://127.0.0.1:5000/ping').status_code == 200:
+        print("All clear! Server ready to recieve data...")
+    else:
+        print("Some problems with connection to server. It may be good idea to restart server or check connection settings.")
+        
     local_backup()                                                          #Создаем бэкап данных на клиенте, в дальнейшем он понадобится для реализации запрета на удаление локального текста и прочих ограничений.
     modify_mode = False
     watch_manager = pyinotify.WatchManager()                                #Создаем инстанс менеджера, через который будем мониторить изменения файла.

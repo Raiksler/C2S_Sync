@@ -22,6 +22,11 @@ class Db_manager:
         return self.cursor.fetchall()[0]
 
 
+@app.route("/ping")
+def ping():
+        return Response(status=200)
+
+
 @app.route("/check_sum")
 def check_sum():
     with open("data.txt", "r") as data:
