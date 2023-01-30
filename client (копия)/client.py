@@ -8,7 +8,7 @@ import requests
 
 class EventHandler(pyinotify.ProcessEvent):
 
-    def process_IN_MODIFY(self, event):
+    def process_IN_CLOSE_WRITE(self, event):
         time.sleep(0.3)
         global modify_mode
         modify_mode = True                                                        #Останавливаем мониторинг событий, чтобы избежать лишних срабатываний во время изменений файла.
@@ -28,7 +28,7 @@ class EventHandler(pyinotify.ProcessEvent):
                         print()
             else:
                 print("Local and server files are different. Proceed to updating local file...")
-                new_data = get_difference()                                       #Получаем разницу между бэкапом и редактируемым файлом.
+                new_data = get_difference()
                 return_to_backup()
                 updates = requests.get("http://127.0.0.1:5000/request_update?base_hash={hash}".format(hash=backup_hash)).json()
                 apply_updates(updates)
@@ -43,11 +43,13 @@ class EventHandler(pyinotify.ProcessEvent):
                         update_backup()                        
                         print()
 
+
         modify_mode = False                                                       #Снова запускаем мониторинг событий.
         notifier.loop(callback=stop_monitoring_to_modify)
 
 
-def apply_updates(updates):                             #Функция применяет апдейты, полученные от системы контроля версий на сервере.
+def apply_updates(updates):
+    print("updates is ", updates)
     for item in updates:
         if item[1] == True:
             with open ("data.txt", "r") as data:
@@ -57,17 +59,18 @@ def apply_updates(updates):                             #Функция прим
                 data_lines = data.readlines()
                 data_lines[-1] = data_lines[-1].rstrip("\n")
         data_lines.extend([item[0]])
+        print(data_lines)
         with open ("data.txt", "w") as data:
             data.write(''.join(data_lines))
     print("data.txt has been updated to actual version!")
 
 
-def compare_hash(local_hash):                                                   #Функция сравнивает хэш сумму локального и удаленного файлов.
+def compare_hash(local_hash):
     server_hash = requests.get("http://127.0.0.1:5000/check_sum").text
     return local_hash == server_hash
 
 
-def get_backup_hash():                                                         #Функция получает хэш сумму бэкап файла.
+def get_backup_hash():
     with open("data_backup.txt", "r") as backup:
         backup_lines = backup.readlines()
         joined_lines = "".join(backup_lines).encode("UTF-8")
@@ -75,7 +78,7 @@ def get_backup_hash():                                                         #
         return str(backup_hash)
 
 
-def get_difference():                                                           #Функция возвращает словарь с двумя ключами. Changes - новая строка (str), и new_line (boolean) указтель на то, нужно ли добавлять changes овой строкой или присоединять к имеющейся.
+def get_difference():
     with open("data.txt","r") as data, open("data_backup.txt", "r") as backup:
         data_lines = data.readlines()
         backup_lines = backup.readlines()
@@ -83,10 +86,10 @@ def get_difference():                                                           
         backup_path = pathlib.Path("data_backup.txt")
         if filecmp.cmp(data_path, backup_path) == True:
             print("Changes not detected")
-            print()
             return None
         else:
             difference = list(difflib.unified_diff(backup_lines, data_lines, "data_backup.txt", "data.txt", n=0))[3:]
+            print(difference)
             changes = {"changes" : "", "new_line" : True}
             i = 0
             while i < len(difference):
@@ -121,7 +124,7 @@ def compare_lines(data, backup):                                                
     return True
 
 
-def count_lines(file):                                                          #Функция считает строки в
+def count_lines(file):
     lines = 0
     for line in file:
         lines += 1
@@ -129,7 +132,7 @@ def count_lines(file):                                                          
     return lines
 
 
-def validate_changes():                                               #Функция проводит локальную валидацию изменений. Проверяет, что использованы только допустимые сиволы, а изменения внесены только в конец файла.
+def validate_changes():
     with open("data.txt","r") as data, open("data_backup.txt", "r") as backup:
         data_lines = count_lines(data)
         backup_lines = count_lines(backup)
@@ -141,24 +144,24 @@ def validate_changes():                                               #Функ�
             print("Error: data added not in the end of the file!")
             return_to_backup()
             return False
-        data.seek(0)
-        for line in data.readlines():
-            if line.isascii() != True:
-                print("Error: invalid characters added!")
-                return_to_backup()
-                return False
     return True
+            
+
+def local_backup():
+    with open("data.txt","r") as data, open("data_backup.txt", "w") as backup:
+        for line in data:                          
+            backup.write(line)
 
 
-def return_to_backup():                                            #Функция возвращает data.txt к бэкапу.
+def return_to_backup():
     print("Returning to backup...")
     with open("data.txt","w") as data, open("data_backup.txt", "r") as backup:
         for line in backup:                          
             data.write(line)
-        print("data.txt returned to backup\n")
+        print("data.txt returned to backup")
 
 
-def update_backup():                                              #Функция обновляет бэкап данными из data.txt
+def update_backup():
     with open("data.txt", 'r') as data, open ("data_backup.txt", "w") as backup:
         data_lines = data.readlines()
         backup.write("".join(data_lines))
@@ -172,14 +175,14 @@ def stop_monitoring_to_modify(notifier):                                    #К�
 if __name__ == "__main__":
 
     if requests.get('http://127.0.0.1:5000/ping').status_code == 200:
-        print("All clear! Server ready to recieve data...\n")
+        print("All clear! Server ready to recieve data...")
     else:
         print("Some problems with connection to server. It may be good idea to restart server or check connection settings.")
         
-    update_backup()                                                          #Создаем бэкап данных на клиенте, в дальнейшем он понадобится для реализации запрета на удаление локального текста и прочих ограничений.
+    local_backup()                                                          #Создаем бэкап данных на клиенте, в дальнейшем он понадобится для реализации запрета на удаление локального текста и прочих ограничений.
     modify_mode = False
     watch_manager = pyinotify.WatchManager()                                #Создаем инстанс менеджера, через который будем мониторить изменения файла.
-    target_event = pyinotify.IN_MODIFY                                      #Выбираем ивент, который будем мониторить.
+    target_event = pyinotify.IN_CLOSE_WRITE                                      #Выбираем ивент, который будем мониторить.
     handler = EventHandler()
     notifier = pyinotify.Notifier(watch_manager, handler, threshold=1)                   #Задаем параметры проверки на изменения.
     work_dir = watch_manager.add_watch('.', target_event, rec=True)         #Задаем директорию и событие, которое будем ловить.
