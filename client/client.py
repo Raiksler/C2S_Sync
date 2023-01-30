@@ -24,6 +24,7 @@ class EventHandler(pyinotify.ProcessEvent):
                     new_data["base_hash"] = backup_hash                           #!!! Добавляем к отправляемым данным хэш сумму файла, на которой базируются изменения. Это понадобится для работы системы контроля верссий на сервере.
                     update_on_server = requests.post("http://127.0.0.1:5000/send_changes", json = new_data)
                     if update_on_server.status_code == 200:                       #Данные улетели. Если все ок, обновляем бэкап файл до текущих изменений.
+                        print("Update sent!")
                         update_backup()
                         print()
             else:
