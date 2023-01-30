@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 class Db_manager:         #Класс управления базой данных
     def __init__(self):
-        self.connection = psycopg2.connect(user='postgres', password='pgadminpass', host='localhost', database='text_syncro')
+        self.connection = psycopg2.connect(user='postgres', password='pgadminpass', host='database', database='text_syncro')
         self.cursor = self.connection.cursor()
 
     def add_change(self, changes):      #Добабвление новых изменений в систему контроля версий.
@@ -69,4 +69,4 @@ def apply_changes(change):
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5000)
